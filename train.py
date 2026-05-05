@@ -22,10 +22,10 @@ from tqdm import tqdm
 
 from config import Config
 from data.dataset import HyperBodyDataset
-from data.organ_hierarchy import load_organ_hierarchy, compute_tree_distance_matrix
+from data.organ_hierarchy import load_organ_hierarchy
 from models.body_net import BodyNet
 from models.losses import CombinedLoss, compute_class_weights
-from models.hyperbolic.lorentz_loss import LorentzRankingLoss, LorentzTreeRankingLoss
+from models.hyperbolic.lorentz_loss import LorentzTreeRankingLoss
 from utils.metrics import DiceMetric
 from utils.checkpoint import save_checkpoint, load_checkpoint
 
@@ -143,7 +143,7 @@ def train_one_epoch(model, loader, seg_criterion, hyp_criterion, hyp_weight, opt
         model: The model to train (BodyNet)
         loader: DataLoader for training data
         seg_criterion: Segmentation loss function (CombinedLoss)
-        hyp_criterion: Hyperbolic loss function (LorentzRankingLoss)
+        hyp_criterion: Hyperbolic loss function (LorentzTreeRankingLoss)
         hyp_weight: Weight for hyperbolic loss
         optimizer: Optimizer
         device: Device to use
@@ -391,60 +391,29 @@ def main():
     if cfg.dice_ignore_index is not None:
         logger.info(f"Dice loss ignoring class {cfg.dice_ignore_index}")
 
-    # Hyperbolic ranking loss (with Curriculum Negative Mining)
-    # Choose loss class based on hyp_distance_mode config
-    if cfg.hyp_distance_mode == "tree":
-        # Tree-based negative sampling: uses precomputed tree distances
-        tree_dist_matrix = compute_tree_distance_matrix(cfg.tree_file, class_names)
-        hyp_criterion = LorentzTreeRankingLoss(
-            tree_dist_matrix=tree_dist_matrix,
-            margin=cfg.hyp_margin,
-            curv=cfg.hyp_curv,
-            num_samples_per_class=cfg.hyp_samples_per_class,
-            num_negatives=cfg.hyp_num_negatives,
-            t_start=cfg.hyp_t_start,
-            t_end=cfg.hyp_t_end,
-            warmup_epochs=cfg.hyp_warmup_epochs,
-            curriculum_epochs=cfg.hyp_curriculum_epochs,
+    # Hyperbolic ranking loss with graph-distance negative sampling.
+    graph_dist_matrix = load_precomputed_graph_distance_matrix(
+        cfg.graph_distance_matrix,
+        logger,
+    )
+    expected_shape = (cfg.num_classes, cfg.num_classes)
+    if tuple(graph_dist_matrix.shape) != expected_shape:
+        raise ValueError(
+            f"graph_distance_matrix shape {tuple(graph_dist_matrix.shape)} != {expected_shape}"
         )
-        logger.info("Using LorentzTreeRankingLoss (tree distance mode)")
-    elif cfg.hyp_distance_mode == "graph":
-        # Graph-based negative sampling: load precomputed graph distance matrix.
-        graph_dist_matrix = load_precomputed_graph_distance_matrix(
-            cfg.graph_distance_matrix,
-            logger,
-        )
-        expected_shape = (cfg.num_classes, cfg.num_classes)
-        if tuple(graph_dist_matrix.shape) != expected_shape:
-            raise ValueError(
-                f"graph_distance_matrix shape {tuple(graph_dist_matrix.shape)} != {expected_shape}"
-            )
 
-        hyp_criterion = LorentzTreeRankingLoss(
-            tree_dist_matrix=graph_dist_matrix,
-            margin=cfg.hyp_margin,
-            curv=cfg.hyp_curv,
-            num_samples_per_class=cfg.hyp_samples_per_class,
-            num_negatives=cfg.hyp_num_negatives,
-            t_start=cfg.hyp_t_start,
-            t_end=cfg.hyp_t_end,
-            warmup_epochs=cfg.hyp_warmup_epochs,
-            curriculum_epochs=cfg.hyp_curriculum_epochs,
-        )
-        logger.info("Using LorentzTreeRankingLoss (graph distance mode)")
-    else:
-        # Default: Hyperbolic distance-based negative sampling
-        hyp_criterion = LorentzRankingLoss(
-            margin=cfg.hyp_margin,
-            curv=cfg.hyp_curv,
-            num_samples_per_class=cfg.hyp_samples_per_class,
-            num_negatives=cfg.hyp_num_negatives,
-            t_start=cfg.hyp_t_start,
-            t_end=cfg.hyp_t_end,
-            warmup_epochs=cfg.hyp_warmup_epochs,
-            curriculum_epochs=cfg.hyp_curriculum_epochs,
-        )
-        logger.info(f"Using LorentzRankingLoss (hyperbolic distance mode)")
+    hyp_criterion = LorentzTreeRankingLoss(
+        tree_dist_matrix=graph_dist_matrix,
+        margin=cfg.hyp_margin,
+        curv=cfg.hyp_curv,
+        num_samples_per_class=cfg.hyp_samples_per_class,
+        num_negatives=cfg.hyp_num_negatives,
+        t_start=cfg.hyp_t_start,
+        t_end=cfg.hyp_t_end,
+        warmup_epochs=cfg.hyp_warmup_epochs,
+        curriculum_epochs=cfg.hyp_curriculum_epochs,
+    )
+    logger.info("Using LorentzTreeRankingLoss (graph distance mode)")
 
     # Move hyp_criterion to device (required for registered buffers like tree_dist_matrix)
     hyp_criterion = hyp_criterion.to(device)
@@ -452,11 +421,11 @@ def main():
     # Separate param groups for visual and label embeddings (differential LR)
     raw_model = model.module if hasattr(model, 'module') else model
     visual_params = [p for n, p in raw_model.named_parameters() if 'label_emb' not in n]
-    text_params = [p for n, p in raw_model.named_parameters() if 'label_emb' in n]
+    label_params = [p for n, p in raw_model.named_parameters() if 'label_emb' in n]
 
     optimizer = optim.Adam([
         {'params': visual_params, 'lr': cfg.lr},
-        {'params': text_params, 'lr': cfg.lr * cfg.hyp_text_lr_ratio}
+        {'params': label_params, 'lr': cfg.lr * cfg.hyp_text_lr_ratio}
     ], weight_decay=cfg.weight_decay)
     if cfg.lr_scheduler == "cosine":
         cosine_T_max = cfg.epochs - cfg.lr_warmup_epochs
@@ -563,8 +532,8 @@ def main():
             freeze_status = "trainable"
 
         current_lr = optimizer.param_groups[0]["lr"]
-        text_lr = optimizer.param_groups[1]["lr"] if len(optimizer.param_groups) > 1 else current_lr
-        logger.info(f"Epoch [{epoch + 1}/{cfg.epochs}]  LR: {current_lr:.6f}  TextLR: {text_lr:.6f}  TextEmb: {freeze_status}")
+        label_lr = optimizer.param_groups[1]["lr"] if len(optimizer.param_groups) > 1 else current_lr
+        logger.info(f"Epoch [{epoch + 1}/{cfg.epochs}]  LR: {current_lr:.6f}  LabelLR: {label_lr:.6f}  LabelEmb: {freeze_status}")
 
         # Train
         train_total, train_seg, train_hyp = train_one_epoch(

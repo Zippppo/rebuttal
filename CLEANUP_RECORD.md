@@ -18,4 +18,7 @@ Scope: keep the training/runtime path needed by local `configs/021201-19.yaml`.
 - Done: removed optional embedding tracking from training. The 021201 config does
   not enable embedding visualization, so the training path no longer imports the
   tracker or computes system labels for tracker output.
-- Pending: non-graph negative sampling and unused runtime config cleanup.
+- Done: narrowed training negative sampling to the graph-distance matrix path
+  required by 021201. Removed the runtime mode switch and unused spatial
+  adjacency config fields from `Config`; deprecated keys are ignored silently
+  for the local ignored config file.

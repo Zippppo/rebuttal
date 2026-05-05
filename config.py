@@ -40,13 +40,6 @@ class Config:
     hyp_freeze_epochs: int = 5  # Freeze label embeddings for first N epochs (0 = no freeze)
     hyp_text_lr_ratio: float = 0.01  # Label embedding LR = base_lr * ratio
     hyp_text_grad_clip: float = 0.1  # Gradient clip for label embeddings (first unfreeze epoch)
-    hyp_distance_mode: str = "graph"  # Distance mode for negative sampling: "hyperbolic", "tree", or "graph"
-
-    # Spatial adjacency (for hyp_distance_mode="graph")
-    spatial_dilation_radius: int = 3  # Cube dilation radius in voxels
-    spatial_lambda: float = 1.0  # Scale factor for spatial edge distance
-    spatial_epsilon: float = 0.01  # Prevents division by zero in contact->distance
-    spatial_contact_matrix: str = ""  # Path to precomputed contact_matrix.pt (empty = compute)
     graph_distance_matrix: str = "Dataset/graph_distance_matrix.pt"  # Path to precomputed graph_distance_matrix.pt
 
     # Training
@@ -104,6 +97,11 @@ class Config:
         deprecated_fields = {
             "hyp_direction_mode",
             "hyp_text_embedding_path",
+            "hyp_distance_mode",
+            "spatial_dilation_radius",
+            "spatial_lambda",
+            "spatial_epsilon",
+            "spatial_contact_matrix",
         }
 
         # Build a map of field name -> expected type for type coercion
