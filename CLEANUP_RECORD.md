@@ -22,3 +22,6 @@ Scope: keep the training/runtime path needed by local `configs/021201-19.yaml`.
   required by 021201. Removed the runtime mode switch and unused spatial
   adjacency config fields from `Config`; deprecated keys are ignored silently
   for the local ignored config file.
+- Done: removed unused LR scheduler branches and the unused `num_levels`
+  config. Training now constructs the 021201 multiphase cosine scheduler
+  directly while ignoring deprecated scheduler keys from the local config.

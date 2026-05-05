@@ -46,7 +46,6 @@ def test_02120119_declares_graph_runtime_path():
     cfg = _load_cfg()
 
     assert cfg.num_classes == 70
-    assert cfg.lr_scheduler == "cosine_multiphase"
     assert cfg.graph_distance_matrix == "Dataset/graph_distance_matrix.pt"
 
 

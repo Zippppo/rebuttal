@@ -17,7 +17,6 @@ class Config:
     # Model
     in_channels: int = 1
     base_channels: int = 32
-    num_levels: int = 4 #当前的无用参数，本意是动态调整3DUnet的层数
 
     # Dense Bottleneck
     growth_rate: int = 32      # channels added per layer
@@ -59,13 +58,8 @@ class Config:
     dice_ignore_index: Optional[int] = None
     hyp_weight: float = 0.05      # Loss weight
 
-    # LR scheduler
-    lr_scheduler: str = "cosine"       # "plateau", "cosine", or "cosine_multiphase"
-    lr_patience: int = 10               # plateau only
-    lr_factor: float = 0.5              # plateau only
-    lr_warmup_epochs: int = 4           # cosine only: linear warmup epochs
-    lr_eta_min: float = 1e-6            # cosine only: minimum LR
-    # cosine_multiphase: two-phase cosine decay then constant
+    # LR scheduler: two-phase cosine decay then constant
+    lr_warmup_epochs: int = 4
     lr_phase1_end: int = 0              # end epoch for phase 1 (0 = disabled)
     lr_phase1_min: float = 1e-6         # min LR at end of phase 1
     lr_phase2_end: int = 0              # end epoch for phase 2
@@ -102,6 +96,11 @@ class Config:
             "spatial_lambda",
             "spatial_epsilon",
             "spatial_contact_matrix",
+            "num_levels",
+            "lr_scheduler",
+            "lr_patience",
+            "lr_factor",
+            "lr_eta_min",
         }
 
         # Build a map of field name -> expected type for type coercion

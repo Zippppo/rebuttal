@@ -17,7 +17,6 @@ from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, SequentialLR, LinearLR
 from tqdm import tqdm
 
 from config import Config
@@ -427,50 +426,36 @@ def main():
         {'params': visual_params, 'lr': cfg.lr},
         {'params': label_params, 'lr': cfg.lr * cfg.hyp_text_lr_ratio}
     ], weight_decay=cfg.weight_decay)
-    if cfg.lr_scheduler == "cosine":
-        cosine_T_max = cfg.epochs - cfg.lr_warmup_epochs
-        assert cosine_T_max > 0, f"epochs ({cfg.epochs}) must be > lr_warmup_epochs ({cfg.lr_warmup_epochs})"
-        cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_T_max, eta_min=cfg.lr_eta_min)
-        if cfg.lr_warmup_epochs > 0:
-            warmup_sched = LinearLR(optimizer, start_factor=1.0, total_iters=cfg.lr_warmup_epochs)
-            scheduler = SequentialLR(optimizer, [warmup_sched, cosine_sched], milestones=[cfg.lr_warmup_epochs])
+    # Two-phase cosine decay then constant:
+    #   warmup -> cosine(lr -> phase1_min) -> cosine(phase1_min -> phase2_min) -> constant(phase2_min)
+    assert cfg.lr_phase1_end > cfg.lr_warmup_epochs, \
+        f"lr_phase1_end ({cfg.lr_phase1_end}) must be > lr_warmup_epochs ({cfg.lr_warmup_epochs})"
+    assert cfg.lr_phase2_end > cfg.lr_phase1_end, \
+        f"lr_phase2_end ({cfg.lr_phase2_end}) must be > lr_phase1_end ({cfg.lr_phase1_end})"
+    base_lr = cfg.lr
+    p1_end = cfg.lr_phase1_end
+    p2_end = cfg.lr_phase2_end
+    p1_min_factor = cfg.lr_phase1_min / base_lr
+    p2_min_factor = cfg.lr_phase2_min / base_lr
+    warmup_ep = cfg.lr_warmup_epochs
+
+    def _multiphase_lambda(epoch):
+        if epoch < warmup_ep:
+            return 1.0
+        elif epoch < p1_end:
+            t = (epoch - warmup_ep) / max(p1_end - warmup_ep, 1)
+            return p1_min_factor + 0.5 * (1.0 - p1_min_factor) * (1 + math.cos(math.pi * t))
+        elif epoch < p2_end:
+            t = (epoch - p1_end) / max(p2_end - p1_end, 1)
+            return p2_min_factor + 0.5 * (p1_min_factor - p2_min_factor) * (1 + math.cos(math.pi * t))
         else:
-            scheduler = cosine_sched
-    elif cfg.lr_scheduler == "cosine_multiphase":
-        # Two-phase cosine decay then constant:
-        #   warmup -> cosine(lr -> phase1_min) -> cosine(phase1_min -> phase2_min) -> constant(phase2_min)
-        assert cfg.lr_phase1_end > cfg.lr_warmup_epochs, \
-            f"lr_phase1_end ({cfg.lr_phase1_end}) must be > lr_warmup_epochs ({cfg.lr_warmup_epochs})"
-        assert cfg.lr_phase2_end > cfg.lr_phase1_end, \
-            f"lr_phase2_end ({cfg.lr_phase2_end}) must be > lr_phase1_end ({cfg.lr_phase1_end})"
-        base_lr = cfg.lr
-        p1_end = cfg.lr_phase1_end
-        p2_end = cfg.lr_phase2_end
-        p1_min_factor = cfg.lr_phase1_min / base_lr
-        p2_min_factor = cfg.lr_phase2_min / base_lr
-        warmup_ep = cfg.lr_warmup_epochs
+            return p2_min_factor
 
-        def _multiphase_lambda(epoch):
-            if epoch < warmup_ep:
-                return 1.0
-            elif epoch < p1_end:
-                t = (epoch - warmup_ep) / max(p1_end - warmup_ep, 1)
-                return p1_min_factor + 0.5 * (1.0 - p1_min_factor) * (1 + math.cos(math.pi * t))
-            elif epoch < p2_end:
-                t = (epoch - p1_end) / max(p2_end - p1_end, 1)
-                return p2_min_factor + 0.5 * (p1_min_factor - p2_min_factor) * (1 + math.cos(math.pi * t))
-            else:
-                return p2_min_factor
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=_multiphase_lambda)
-        logger.info(f"Using cosine_multiphase LR: warmup={warmup_ep}, "
-                     f"phase1=[{warmup_ep},{p1_end}) -> {cfg.lr_phase1_min}, "
-                     f"phase2=[{p1_end},{p2_end}) -> {cfg.lr_phase2_min}, "
-                     f"then constant")
-    else:
-        scheduler = ReduceLROnPlateau(
-            optimizer, mode="max", factor=cfg.lr_factor, patience=cfg.lr_patience
-        )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=_multiphase_lambda)
+    logger.info(f"Using cosine_multiphase LR: warmup={warmup_ep}, "
+                 f"phase1=[{warmup_ep},{p1_end}) -> {cfg.lr_phase1_min}, "
+                 f"phase2=[{p1_end},{p2_end}) -> {cfg.lr_phase2_min}, "
+                 f"then constant")
 
     # AMP GradScaler (only if use_amp is enabled)
     scaler = GradScaler() if cfg.use_amp else None
@@ -547,10 +532,7 @@ def main():
         )
 
         # Update scheduler
-        if cfg.lr_scheduler in ("cosine", "cosine_multiphase"):
-            scheduler.step()
-        else:
-            scheduler.step(mean_dice)
+        scheduler.step()
 
         # Log to TensorBoard (only main process)
         if writer:
