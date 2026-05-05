@@ -1,9 +1,8 @@
 """
-Prediction script for L_R_FZ+cls0_0.1 model (BodyNet with hyperbolic embedding + frozen text embeddings).
+Prediction script for L_R_FZ+cls0_0.1 model.
 
 This model uses:
-- hyp_freeze_epochs=10: Text embeddings frozen for first 10 epochs
-- hyp_direction_mode="random": Random direction initialization
+- hyp_freeze_epochs=10: Label embeddings frozen for first 10 epochs
 
 Usage:
 
@@ -57,8 +56,6 @@ def load_model(cfg, ckpt_path, device):
         class_depths=class_depths,
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
-        text_embedding_path=cfg.hyp_text_embedding_path,
     )
 
     # Load checkpoint

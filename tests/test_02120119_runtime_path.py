@@ -42,11 +42,10 @@ def _load_class_depths(cfg: Config):
     return load_organ_hierarchy(cfg.tree_file, class_names)
 
 
-def test_02120119_declares_graph_random_runtime_path():
+def test_02120119_declares_graph_runtime_path():
     cfg = _load_cfg()
 
     assert cfg.num_classes == 70
-    assert cfg.hyp_direction_mode == "random"
     assert cfg.hyp_distance_mode == "graph"
     assert cfg.lr_scheduler == "cosine_multiphase"
     assert cfg.graph_distance_matrix == "Dataset/graph_distance_matrix.pt"
@@ -68,7 +67,6 @@ def test_02120119_bodynet_forward_and_graph_loss_smoke():
         class_depths=_load_class_depths(cfg),
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
     )
     model.eval()
 

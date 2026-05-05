@@ -1,9 +1,8 @@
 """
-Prediction script for L_S_FZ+cls0_0.3 model (BodyNet with hyperbolic embedding + semantic direction).
+Prediction script for L_S_FZ+cls0_0.3 model.
 
 This model uses:
-- hyp_freeze_epochs=10: Text embeddings frozen for first 10 epochs
-- hyp_direction_mode="semantic": Uses BioLORD text embedding directions
+- hyp_freeze_epochs=10: Label embeddings frozen for first 10 epochs
 
 Usage:
     python eval/pred_LS_FZ10_cls0_0.1.py --config configs/L_S_FZ+cls0_0.1.yaml --output eval/pred/L_S_FZ+cls0_0.1
@@ -56,8 +55,6 @@ def load_model(cfg, ckpt_path, device):
         class_depths=class_depths,
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
-        text_embedding_path=cfg.hyp_text_embedding_path,
     )
 
     # Load checkpoint

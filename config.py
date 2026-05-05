@@ -37,11 +37,9 @@ class Config:
     hyp_curriculum_epochs: int = 50  # Epochs for full easy->hard curriculum (decoupled from total epochs)
     hyp_min_radius: float = 0.1   # Shallow organ init norm
     hyp_max_radius: float = 2.0   # Deep organ init norm
-    hyp_direction_mode: str = "random"  # "random" or "semantic"
-    hyp_text_embedding_path: str = "Dataset/text_embeddings/sat_label_embeddings.pt"
     hyp_freeze_epochs: int = 5  # Freeze label embeddings for first N epochs (0 = no freeze)
-    hyp_text_lr_ratio: float = 0.01  # Text embedding LR = base_lr * ratio
-    hyp_text_grad_clip: float = 0.1  # Gradient clip for text embeddings (first unfreeze epoch)
+    hyp_text_lr_ratio: float = 0.01  # Label embedding LR = base_lr * ratio
+    hyp_text_grad_clip: float = 0.1  # Gradient clip for label embeddings (first unfreeze epoch)
     hyp_distance_mode: str = "graph"  # Distance mode for negative sampling: "hyperbolic", "tree", or "graph"
 
     # Spatial adjacency (for hyp_distance_mode="graph")
@@ -106,6 +104,10 @@ class Config:
 
         # Get valid field names
         valid_fields = {f.name for f in fields(cls)}
+        deprecated_fields = {
+            "hyp_direction_mode",
+            "hyp_text_embedding_path",
+        }
 
         # Build a map of field name -> expected type for type coercion
         field_types = {f.name: f.type for f in fields(cls)}
@@ -122,7 +124,7 @@ class Config:
                 elif isinstance(value, str) and field_types.get(key) in ("int", int):
                     value = int(value)
                 setattr(cfg, key, value)
-            else:
+            elif key not in deprecated_fields:
                 print(f"Warning: Unknown config key '{key}' in YAML, ignored.")
 
         return cfg

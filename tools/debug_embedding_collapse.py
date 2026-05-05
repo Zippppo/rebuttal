@@ -1,5 +1,5 @@
 """
-Debug script to investigate why text embeddings collapse to center.
+Debug script to investigate why label embeddings collapse to center.
 
 Checks:
 1. Gradient magnitudes on tangent_embeddings
@@ -49,8 +49,6 @@ def analyze_checkpoint_embeddings(checkpoint_path: str, config_path: str):
         class_depths=class_depths,
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
-        text_embedding_path=cfg.hyp_text_embedding_path,
     )
 
     # Load checkpoint
@@ -118,8 +116,6 @@ def simulate_gradient_update(config_path: str):
         class_depths=class_depths,
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
-        text_embedding_path=cfg.hyp_text_embedding_path,
     )
 
     # Create dummy data

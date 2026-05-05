@@ -191,7 +191,7 @@ def train_one_epoch(model, loader, seg_criterion, hyp_criterion, hyp_weight, opt
             scaler.unscale_(optimizer)
             if grad_clip > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            # Extra gradient clipping for text embeddings on first unfreeze epoch
+            # Extra gradient clipping for label embeddings on first unfreeze epoch
             if is_first_unfreeze_epoch:
                 raw_model = model.module if hasattr(model, 'module') else model
                 nn.utils.clip_grad_norm_(raw_model.label_emb.tangent_embeddings, cfg.hyp_text_grad_clip)
@@ -206,7 +206,7 @@ def train_one_epoch(model, loader, seg_criterion, hyp_criterion, hyp_weight, opt
             total_loss.backward()
             if grad_clip > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            # Extra gradient clipping for text embeddings on first unfreeze epoch
+            # Extra gradient clipping for label embeddings on first unfreeze epoch
             if is_first_unfreeze_epoch:
                 raw_model = model.module if hasattr(model, 'module') else model
                 nn.utils.clip_grad_norm_(raw_model.label_emb.tangent_embeddings, cfg.hyp_text_grad_clip)
@@ -369,8 +369,6 @@ def main():
         class_depths=class_depths,
         min_radius=cfg.hyp_min_radius,
         max_radius=cfg.hyp_max_radius,
-        direction_mode=cfg.hyp_direction_mode,
-        text_embedding_path=cfg.hyp_text_embedding_path,
     )
 
     num_params = sum(p.numel() for p in model.parameters())
@@ -453,7 +451,7 @@ def main():
     # Move hyp_criterion to device (required for registered buffers like tree_dist_matrix)
     hyp_criterion = hyp_criterion.to(device)
 
-    # Separate param groups for visual and text embeddings (differential LR)
+    # Separate param groups for visual and label embeddings (differential LR)
     raw_model = model.module if hasattr(model, 'module') else model
     visual_params = [p for n, p in raw_model.named_parameters() if 'label_emb' not in n]
     text_params = [p for n, p in raw_model.named_parameters() if 'label_emb' in n]
@@ -532,7 +530,7 @@ def main():
         # Warn about freeze state when resuming
         if cfg.hyp_freeze_epochs > 0:
             if start_epoch < cfg.hyp_freeze_epochs:
-                logger.info(f"  Note: Text embeddings will remain FROZEN until epoch {cfg.hyp_freeze_epochs}")
+                logger.info(f"  Note: Label embeddings will remain FROZEN until epoch {cfg.hyp_freeze_epochs}")
             elif start_epoch == cfg.hyp_freeze_epochs:
                 logger.info(f"  Note: Resuming at first unfreeze epoch, extra gradient clipping will be applied")
 
@@ -560,10 +558,10 @@ def main():
     logger.info(f"Starting training from epoch {start_epoch} to {cfg.epochs}")
     if cfg.hyp_freeze_epochs > 0:
         if cfg.hyp_freeze_epochs >= cfg.epochs:
-            logger.warning(f"hyp_freeze_epochs ({cfg.hyp_freeze_epochs}) >= epochs ({cfg.epochs}), text embeddings will NEVER be unfrozen!")
+            logger.warning(f"hyp_freeze_epochs ({cfg.hyp_freeze_epochs}) >= epochs ({cfg.epochs}), label embeddings will NEVER be unfrozen!")
         else:
-            logger.info(f"Text embedding freeze: epochs 0-{cfg.hyp_freeze_epochs - 1}, unfreeze at epoch {cfg.hyp_freeze_epochs}")
-            logger.info(f"Text embedding LR ratio: {cfg.hyp_text_lr_ratio}, grad clip on unfreeze: {cfg.hyp_text_grad_clip}")
+            logger.info(f"Label embedding freeze: epochs 0-{cfg.hyp_freeze_epochs - 1}, unfreeze at epoch {cfg.hyp_freeze_epochs}")
+            logger.info(f"Label embedding LR ratio: {cfg.hyp_text_lr_ratio}, grad clip on unfreeze: {cfg.hyp_text_grad_clip}")
     logger.info("-" * 60)
 
     for epoch in range(start_epoch, cfg.epochs):
