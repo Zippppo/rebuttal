@@ -15,5 +15,7 @@ Scope: keep the training/runtime path needed by local `configs/021201-19.yaml`.
   local `configs/021201-19.yaml` behavior. Deprecated config keys
   `hyp_direction_mode` and `hyp_text_embedding_path` are ignored silently so
   the local ignored config remains runnable.
-- Pending: embedding tracking cleanup.
+- Done: removed optional embedding tracking from training. The 021201 config does
+  not enable embedding visualization, so the training path no longer imports the
+  tracker or computes system labels for tracker output.
 - Pending: non-graph negative sampling and unused runtime config cleanup.

@@ -22,8 +22,7 @@ from tqdm import tqdm
 
 from config import Config
 from data.dataset import HyperBodyDataset
-from data.organ_hierarchy import load_organ_hierarchy, load_class_to_system, compute_tree_distance_matrix
-from models.hyperbolic.embedding_tracker import EmbeddingTracker
+from data.organ_hierarchy import load_organ_hierarchy, compute_tree_distance_matrix
 from models.body_net import BodyNet
 from models.losses import CombinedLoss, compute_class_weights
 from models.hyperbolic.lorentz_loss import LorentzRankingLoss, LorentzTreeRankingLoss
@@ -353,7 +352,6 @@ def main():
     with open(cfg.dataset_info_file) as f:
         class_names = json.load(f)["class_names"]
     class_depths = load_organ_hierarchy(cfg.tree_file, class_names)
-    class_to_system = load_class_to_system(cfg.tree_file, class_names) 
 
     # Model
     logger.info("Creating model...")
@@ -537,23 +535,6 @@ def main():
     # TensorBoard writer (only main process)
     writer = SummaryWriter(log_dir=run_log_dir) if is_main_process() else None
 
-    # Embedding tracker (only main process, controlled by config)
-    embedding_tracker = None
-    if is_main_process() and cfg.track_embeddings:
-        # Use checkpoint_dir basename as model_name to avoid conflicts
-        model_name = os.path.basename(cfg.checkpoint_dir)
-        embedding_tracker = EmbeddingTracker(
-            model_name=model_name,
-            class_names=class_names,
-            class_to_system=class_to_system,
-            output_dir="docs/visualizations",
-            curv=cfg.hyp_curv
-        )
-        # Record initial embeddings (epoch 0) before training
-        raw_model = model.module if hasattr(model, 'module') else model
-        embedding_tracker.on_epoch_end(epoch=0, label_embedding=raw_model.label_emb)
-        logger.info(f"EmbeddingTracker initialized, output: {embedding_tracker.output_dir}")
-
     # Training loop
     logger.info(f"Starting training from epoch {start_epoch} to {cfg.epochs}")
     if cfg.hyp_freeze_epochs > 0:
@@ -628,11 +609,6 @@ def main():
             }
             for name, idx in key_organs.items():
                 writer.add_scalar(name, dice_per_class[idx].item(), epoch)
-
-        # Track embedding evolution (only main process)
-        if embedding_tracker is not None:
-            raw_model = model.module if hasattr(model, 'module') else model
-            embedding_tracker.on_epoch_end(epoch=epoch + 1, label_embedding=raw_model.label_emb)
 
         # Check if best model
         is_best = mean_dice > best_dice

@@ -89,9 +89,6 @@ class Config:
     # Resume
     resume: str = ""
 
-    # Embedding tracking
-    track_embeddings: bool = False
-
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "Config":
         """Load config from YAML file, overriding defaults."""
